@@ -1,0 +1,531 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Import Libraries\n",
+    "import requests\n",
+    "from requests.adapters import HTTPAdapter\n",
+    "from requests.packages.urllib3.util.retry import Retry\n",
+    "from bs4 import BeautifulSoup\n",
+    "import  pandas as pd\n",
+    "import matplotlib.pyplot as plt\n",
+    "import numpy as np\n",
+    "import string\n",
+    "import time\n",
+    "import re\n",
+    "import os\n",
+    "from functools import reduce\n",
+    "trim = re.compile(r'[^\\d.,]+')\n",
+    "\n",
+    "# http://www.zipcodestogo.com/New%20York/\n",
+    "# http://www.zipcodestogo.com/New%20Jersey/"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Read in NJ Zip Codes\n",
+    "Source: http://www.zipcodestogo.com/New%20Jersey/"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style>\n",
+       "    .dataframe thead tr:only-child th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: left;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>County</th>\n",
+       "      <th>City</th>\n",
+       "      <th>ZipCode</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>Bergen</td>\n",
+       "      <td>Alpine</td>\n",
+       "      <td>7620</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1</th>\n",
+       "      <td>Bergen</td>\n",
+       "      <td>Bergenfield</td>\n",
+       "      <td>7621</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2</th>\n",
+       "      <td>Bergen</td>\n",
+       "      <td>Bogota</td>\n",
+       "      <td>7603</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>3</th>\n",
+       "      <td>Bergen</td>\n",
+       "      <td>Carlstadt</td>\n",
+       "      <td>7072</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>4</th>\n",
+       "      <td>Bergen</td>\n",
+       "      <td>Cliffside Park</td>\n",
+       "      <td>7010</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "   County            City  ZipCode\n",
+       "0  Bergen          Alpine     7620\n",
+       "1  Bergen     Bergenfield     7621\n",
+       "2  Bergen          Bogota     7603\n",
+       "3  Bergen       Carlstadt     7072\n",
+       "4  Bergen  Cliffside Park     7010"
+      ]
+     },
+     "execution_count": 3,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "cwd = os.getcwd()\n",
+    "zipcodes = pd.read_csv(cwd + \"/nj-zip-codes.csv\")\n",
+    "zipcodes.head()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Generate Craigslist Links"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 18,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "base_links = []\n",
+    "for i in range(0, len(zipcodes)):\n",
+    "    link = \"https://newjersey.craigslist.org/search/apa?postal={}\".format(zipcodes.iloc[i,2])\n",
+    "    base_links.append(link)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "['https://newjersey.craigslist.org/search/apa?postal=7620',\n",
+       " 'https://newjersey.craigslist.org/search/apa?postal=7621',\n",
+       " 'https://newjersey.craigslist.org/search/apa?postal=7603',\n",
+       " 'https://newjersey.craigslist.org/search/apa?postal=7072',\n",
+       " 'https://newjersey.craigslist.org/search/apa?postal=7010']"
+      ]
+     },
+     "execution_count": 17,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "base_links[0:5]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "171"
+      ]
+     },
+     "execution_count": 16,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "len(base_links)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Collect Listings Data"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 19,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "--- Expected Run Time: 171econds ---\n",
+      "--- 300.9651300907135 seconds ---\n",
+      "--- 129.965322971344 seconds NOT sleeping ---\n"
+     ]
+    }
+   ],
+   "source": [
+    "start_time = time.time()\n",
+    "sleep_time = 1\n",
+    "\n",
+    "housing = pd.DataFrame()\n",
+    "length = len(base_links)\n",
+    "#length = 1\n",
+    "\n",
+    "print(\"--- Expected Run Time: % seconds ---\" % (length*sleep_time))\n",
+    "\n",
+    "for i in range(0, length):\n",
+    "    \n",
+    "    time.sleep(sleep_time)\n",
+    "    s = requests.Session()\n",
+    "    retries = Retry(total=3, backoff_factor=0.5)\n",
+    "    s.mount('http://', HTTPAdapter(max_retries=retries))\n",
+    "    r = s.get(base_links[i])\n",
+    "    page = BeautifulSoup(r.content, \"lxml\")\n",
+    "    \n",
+    "    dates = []\n",
+    "    prices = []\n",
+    "    bedrooms = []\n",
+    "    titles = []\n",
+    "    locations = []\n",
+    "    links = []\n",
+    "\n",
+    "    rows = page.findAll('li', {'class': 'result-row'})\n",
+    "\n",
+    "    for row in rows:\n",
+    "        # Date\n",
+    "        try: date = row.find('time', {'class': 'result-date'})['datetime']\n",
+    "        except: date = None\n",
+    "        \n",
+    "        # Price\n",
+    "        try: price = row.find('span', {'class': 'result-price'}).text\n",
+    "        except: price = None\n",
+    "            \n",
+    "        # Bedroom\n",
+    "        try: bedroom = row.find('span', {'class': 'housing'}).text\n",
+    "        except: bedroom = None\n",
+    "        \n",
+    "        # Title\n",
+    "        try: title = row.find('a', {'class': 'result-title hdrlnk'}).text\n",
+    "        except: title = None\n",
+    "        \n",
+    "        # Location\n",
+    "        try: location = row.find('span', {'class': 'result-hood'}).text\n",
+    "        except: location = None\n",
+    "        \n",
+    "        # Link\n",
+    "        try: link = row.find('a', href = True)['href']\n",
+    "        except: link = None\n",
+    "        \n",
+    "        dates.append(date)\n",
+    "        prices.append(price)\n",
+    "        bedrooms.append(bedroom)\n",
+    "        titles.append(title)\n",
+    "        locations.append(location)\n",
+    "        links.append(link)\n",
+    "        \n",
+    "    county = [zipcodes.iloc[i,0]] * len(dates)\n",
+    "    city = [zipcodes.iloc[i,1]] * len(dates)\n",
+    "    zipcode = [zipcodes.iloc[i,2]] * len(dates)\n",
+    "        \n",
+    "    temp = pd.DataFrame(list(zip(county, city, zipcode, dates, prices, bedrooms, titles, locations, links)))\n",
+    "    housing = pd.concat([housing, temp])\n",
+    "\n",
+    "print(\"--- %s seconds ---\" % (time.time() - start_time))\n",
+    "print(\"--- %s seconds NOT sleeping ---\" % (time.time() - start_time - (sleep_time * length)))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Clean the data\n",
+    "housing.columns = [\"County\", \"City\", \"Zipcode\", \"Date\", \"Price\", \"Bedrooms\", \"Title\", \"Location\", \"Link\"]\n",
+    "\n",
+    "for i in range(0, len(housing)):\n",
+    "    try: housing.iloc[i,4] = housing.iloc[i,4].replace('$', '')\n",
+    "    except: housing.iloc[i,4] = housing.iloc[i,4]\n",
+    "    \n",
+    "    try: housing.iloc[i,5] = housing.iloc[i,5].replace('\\n', '')\n",
+    "    except: housing.iloc[i,5] = housing.iloc[i,5]\n",
+    "    \n",
+    "    try: housing.iloc[i,5] = housing.iloc[i,5].replace('-', '')\n",
+    "    except: housing.iloc[i,5] = housing.iloc[i,5]\n",
+    "        \n",
+    "    try: housing.iloc[i,5] = housing.iloc[i,5].strip()\n",
+    "    except: housing.iloc[i,5] = housing.iloc[i,5]\n",
+    "    \n",
+    "    try:\n",
+    "        if housing.iloc[i,5].find('br') == True:\n",
+    "            housing.iloc[i,5] = housing.iloc[i,5][0:3]\n",
+    "        else:\n",
+    "            housing.iloc[i,5] = None\n",
+    "    except: None\n",
+    "    \n",
+    "    try: housing.iloc[i,7] = housing.iloc[i,7].replace('(', '')\n",
+    "    except: housing.iloc[i,7] = housing.iloc[i,7]\n",
+    "        \n",
+    "    try: housing.iloc[i,7] = housing.iloc[i,7].replace(')', '')\n",
+    "    except: housing.iloc[i,7] = housing.iloc[i,7]\n",
+    "        \n",
+    "# Remove Duplictates\n",
+    "housing = housing.drop_duplicates(subset = ['County', 'City', 'Zipcode', 'Price', 'Bedrooms', 'Location', 'Title'], keep = 'first')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style>\n",
+       "    .dataframe thead tr:only-child th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: left;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>County</th>\n",
+       "      <th>City</th>\n",
+       "      <th>Zipcode</th>\n",
+       "      <th>Date</th>\n",
+       "      <th>Price</th>\n",
+       "      <th>Bedrooms</th>\n",
+       "      <th>Title</th>\n",
+       "      <th>Location</th>\n",
+       "      <th>Link</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>Bergen</td>\n",
+       "      <td>Alpine</td>\n",
+       "      <td>7620</td>\n",
+       "      <td>2018-03-13 19:51</td>\n",
+       "      <td>None</td>\n",
+       "      <td>4br</td>\n",
+       "      <td>MOVE IN W ONLY $1,000! GIGANTIC 4BR+3BTHS! FIR...</td>\n",
+       "      <td>East Orange=75 Prospect Street=Right off NYC ...</td>\n",
+       "      <td>https://newjersey.craigslist.org/apa/d/move-in...</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2</th>\n",
+       "      <td>Bergen</td>\n",
+       "      <td>Alpine</td>\n",
+       "      <td>7620</td>\n",
+       "      <td>2018-03-13 19:50</td>\n",
+       "      <td>1250</td>\n",
+       "      <td>2br</td>\n",
+       "      <td>==RENOVATED 2 BEDROOM IN ORANGE=BORDER OF GLEN...</td>\n",
+       "      <td>ORANGE=BORDER GLEN RIDGE=IRIDIUM</td>\n",
+       "      <td>https://newjersey.craigslist.org/apa/d/renovat...</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>3</th>\n",
+       "      <td>Bergen</td>\n",
+       "      <td>Alpine</td>\n",
+       "      <td>7620</td>\n",
+       "      <td>2018-03-13 19:48</td>\n",
+       "      <td>1350</td>\n",
+       "      <td>3br</td>\n",
+       "      <td>==RENOVATED 3 BEDROOM=HEAT&amp;HOT WATER INCLUDED=...</td>\n",
+       "      <td>EAST ORANGE=424 PARK AVENUE=IRIDIUM</td>\n",
+       "      <td>https://newjersey.craigslist.org/apa/d/renovat...</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>4</th>\n",
+       "      <td>Bergen</td>\n",
+       "      <td>Alpine</td>\n",
+       "      <td>7620</td>\n",
+       "      <td>2018-03-13 19:48</td>\n",
+       "      <td>1475</td>\n",
+       "      <td>1br</td>\n",
+       "      <td>LUXURY MASSIVE 1 BEDROOM=GYM=W/D IN UNIT=OFF N...</td>\n",
+       "      <td>EAST ORANGE=GLENWOOD AVENUE=IRIDIUM</td>\n",
+       "      <td>https://newjersey.craigslist.org/apa/d/luxury-...</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>5</th>\n",
+       "      <td>Bergen</td>\n",
+       "      <td>Alpine</td>\n",
+       "      <td>7620</td>\n",
+       "      <td>2018-03-13 19:47</td>\n",
+       "      <td>1199</td>\n",
+       "      <td>1br</td>\n",
+       "      <td>=NO FEE=RIGHT OFF NYC TRAIN=BRAND NEW 1BR=S.S....</td>\n",
+       "      <td>EAST ORANGE=271 SOUTH HARRISON STREET=IRIDIUM</td>\n",
+       "      <td>https://newjersey.craigslist.org/apa/d/no-feer...</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "   County    City  Zipcode              Date Price Bedrooms  \\\n",
+       "0  Bergen  Alpine     7620  2018-03-13 19:51  None      4br   \n",
+       "2  Bergen  Alpine     7620  2018-03-13 19:50  1250      2br   \n",
+       "3  Bergen  Alpine     7620  2018-03-13 19:48  1350      3br   \n",
+       "4  Bergen  Alpine     7620  2018-03-13 19:48  1475      1br   \n",
+       "5  Bergen  Alpine     7620  2018-03-13 19:47  1199      1br   \n",
+       "\n",
+       "                                               Title  \\\n",
+       "0  MOVE IN W ONLY $1,000! GIGANTIC 4BR+3BTHS! FIR...   \n",
+       "2  ==RENOVATED 2 BEDROOM IN ORANGE=BORDER OF GLEN...   \n",
+       "3  ==RENOVATED 3 BEDROOM=HEAT&HOT WATER INCLUDED=...   \n",
+       "4  LUXURY MASSIVE 1 BEDROOM=GYM=W/D IN UNIT=OFF N...   \n",
+       "5  =NO FEE=RIGHT OFF NYC TRAIN=BRAND NEW 1BR=S.S....   \n",
+       "\n",
+       "                                            Location  \\\n",
+       "0   East Orange=75 Prospect Street=Right off NYC ...   \n",
+       "2                   ORANGE=BORDER GLEN RIDGE=IRIDIUM   \n",
+       "3                EAST ORANGE=424 PARK AVENUE=IRIDIUM   \n",
+       "4                EAST ORANGE=GLENWOOD AVENUE=IRIDIUM   \n",
+       "5      EAST ORANGE=271 SOUTH HARRISON STREET=IRIDIUM   \n",
+       "\n",
+       "                                                Link  \n",
+       "0  https://newjersey.craigslist.org/apa/d/move-in...  \n",
+       "2  https://newjersey.craigslist.org/apa/d/renovat...  \n",
+       "3  https://newjersey.craigslist.org/apa/d/renovat...  \n",
+       "4  https://newjersey.craigslist.org/apa/d/luxury-...  \n",
+       "5  https://newjersey.craigslist.org/apa/d/no-feer...  "
+      ]
+     },
+     "execution_count": 21,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "housing.head()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Export the Data"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 22,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "writer = pd.ExcelWriter('nj-housing.xlsx')\n",
+    "housing.to_excel(writer,'Sheet1')\n",
+    "writer.save()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### To Do\n",
+    "1. Clean the 'bedrooms' variable properly\n",
+    "2. Figure out how to remove duplicates\n",
+    "3. Add NJ zipcodes\n",
+    "4. Add other important factors (crime, commute to JPM [Maps API])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Other Ideas"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Links:\n",
+    "- http://www.areavibes.com/\n",
+    "- http://www.city-data.com/zips/10024.html\n",
+    "- https://www.melissadata.com/lookups/index.htm\n",
+    "- http://www.relocationessentials.com/aff/www/tools/community/index.aspx\n",
+    "\n",
+    "Variables:\n",
+    "- Estimated zip code population"
+   ]
+  }
+ ],
+ "metadata": {
+  "anaconda-cloud": {},
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.3"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
